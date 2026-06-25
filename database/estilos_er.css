@@ -1,0 +1,27 @@
+/* Estilos para el esquema SEG_CLINICA (Empiezan con SEG_) */
+g[id^="entity-SEG_"] rect {
+    fill: #eef2ff !important;
+    stroke: #4f46e5 !important;
+    stroke-width: 3px !important;
+}
+g[id^="entity-SEG_"] text.entityLabel {
+    fill: #1e1b4b !important;
+    font-weight: bold !important;
+}
+
+/* Estilos para el esquema APP_CLINICA (Empiezan con APP_) */
+g[id^="entity-APP_"] rect {
+    fill: #f0fdf4 !important;
+    stroke: #16a34a !important;
+    stroke-width: 3px !important;
+}
+g[id^="entity-APP_"] text.entityLabel {
+    fill: #14532d !important;
+    font-weight: bold !important;
+}
+
+/* Estilo general para las relaciones */
+path.relation {
+    stroke: #475569 !important;
+    stroke-width: 2px !important;
+}

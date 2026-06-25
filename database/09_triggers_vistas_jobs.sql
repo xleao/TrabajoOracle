@@ -1,0 +1,302 @@
+-- ==============================================================================
+-- SCRIPT 09: TRIGGERS, VISTAS Y JOBS (CONSOLIDADO)
+-- ==============================================================================
+
+-- ==============================================================================
+-- 1. PROCEDIMIENTOS ALMACENADOS INDEPENDIENTES (APP_CLINICA)
+-- ==============================================================================
+
+-- SP_MARCAR_NOTIF_LEIDA: Permite marcar como leída una notificación del sistema
+CREATE OR REPLACE PROCEDURE APP_CLINICA.SP_MARCAR_NOTIF_LEIDA(p_notificacion_id IN NUMBER) IS
+BEGIN
+    UPDATE APP_CLINICA.NOTIFICACIONES 
+    SET LEIDA = 'S' 
+    WHERE NOTIFICACION_ID = p_notificacion_id;
+    COMMIT;
+END;
+/
+
+-- ==============================================================================
+-- 2. DISPARADORES / TRIGGERS (5 Requeridos)
+-- ==============================================================================
+
+-- TRG_FECHA_MODIFICACION: Actualiza FECHA_MODIFICACION en CITAS antes de cualquier UPDATE
+CREATE OR REPLACE TRIGGER APP_CLINICA.TRG_FECHA_MODIFICACION
+BEFORE UPDATE ON APP_CLINICA.CITAS
+FOR EACH ROW
+BEGIN
+    :NEW.FECHA_MODIFICACION := SYSTIMESTAMP;
+END;
+/
+
+-- TRG_SEQ_CITA_ID: Asigna automáticamente el ID de cita desde su secuencia al insertar
+CREATE OR REPLACE TRIGGER APP_CLINICA.TRG_SEQ_CITA_ID
+BEFORE INSERT ON APP_CLINICA.CITAS
+FOR EACH ROW
+BEGIN
+    IF :NEW.CITA_ID IS NULL THEN
+        :NEW.CITA_ID := APP_CLINICA.SEQ_CITAS.NEXTVAL;
+    END IF;
+END;
+/
+
+-- TRG_IMPEDIR_EMPATE_CITA: Evita traslape de citas para el mismo médico
+CREATE OR REPLACE TRIGGER APP_CLINICA.TRG_IMPEDIR_EMPATE_CITA
+BEFORE INSERT OR UPDATE ON APP_CLINICA.CITAS
+FOR EACH ROW
+DECLARE
+    v_disponible NUMBER;
+BEGIN
+    -- Solo verificar si es una cita activa (Pendiente = 1 o Confirmada = 2)
+    IF :NEW.ESTADO_CITA_ID IN (1, 2) THEN
+        v_disponible := APP_CLINICA.PKG_CITAS.FN_VERIFICAR_DISPONIBILIDAD(
+            :NEW.MEDICO_ID, :NEW.FECHA_CITA, :NEW.HORA_INICIO, :NEW.HORA_FIN
+        );
+        IF v_disponible = 0 THEN
+            RAISE_APPLICATION_ERROR(-20002, 'Violación de integridad: El médico ya tiene una cita reservada en ese horario.');
+        END IF;
+    END IF;
+END;
+/
+
+-- TRG_AUDITORIA_CITAS: Registra en SEG_CLINICA.AUDITORIA cada inserción/cambio/eliminación de cita
+CREATE OR REPLACE TRIGGER APP_CLINICA.TRG_AUDITORIA_CITAS
+AFTER INSERT OR UPDATE OR DELETE ON APP_CLINICA.CITAS
+FOR EACH ROW
+DECLARE
+    v_operacion VARCHAR2(10);
+    v_antes CLOB;
+    v_despues CLOB;
+    v_registro_id NUMBER;
+    v_usuario NUMBER;
+BEGIN
+    IF INSERTING THEN 
+        v_operacion := 'INSERT'; 
+        v_registro_id := :NEW.CITA_ID; 
+        v_usuario := :NEW.USUARIO_CREACION;
+    ELSIF UPDATING THEN 
+        v_operacion := 'UPDATE'; 
+        v_registro_id := :OLD.CITA_ID; 
+        v_usuario := :NEW.USUARIO_CREACION;
+    ELSE 
+        v_operacion := 'DELETE'; 
+        v_registro_id := :OLD.CITA_ID; 
+        v_usuario := -1;
+    END IF;
+
+    IF UPDATING OR DELETING THEN
+        v_antes := '{"paciente_id": ' || :OLD.PACIENTE_ID || ', "estado": ' || :OLD.ESTADO_CITA_ID || '}';
+    END IF;
+    
+    IF INSERTING OR UPDATING THEN
+        v_despues := '{"paciente_id": ' || :NEW.PACIENTE_ID || ', "estado": ' || :NEW.ESTADO_CITA_ID || '}';
+    END IF;
+
+    INSERT INTO APP_CLINICA.AUDITORIA (
+        AUDITORIA_ID, USUARIO_ID, TABLA_AFECTADA, OPERACION, REGISTRO_ID, DATOS_ANTES, DATOS_DESPUES
+    ) VALUES (
+        SEG_CLINICA.SEQ_AUDITORIA.NEXTVAL, v_usuario, 'CITAS', v_operacion, v_registro_id, v_antes, v_despues
+    );
+END;
+/
+
+-- TRG_AUDITORIA_PACIENTES: Registra en SEG_CLINICA.AUDITORIA operaciones sobre pacientes
+CREATE OR REPLACE TRIGGER APP_CLINICA.TRG_AUDITORIA_PACIENTES
+AFTER INSERT OR UPDATE OR DELETE ON APP_CLINICA.PACIENTES
+FOR EACH ROW
+DECLARE
+    v_operacion VARCHAR2(10);
+    v_antes CLOB;
+    v_despues CLOB;
+    v_registro_id NUMBER;
+BEGIN
+    IF INSERTING THEN
+        v_operacion := 'INSERT';
+        v_registro_id := :NEW.PACIENTE_ID;
+    ELSIF UPDATING THEN
+        v_operacion := 'UPDATE';
+        v_registro_id := :OLD.PACIENTE_ID;
+    ELSE
+        v_operacion := 'DELETE';
+        v_registro_id := :OLD.PACIENTE_ID;
+    END IF;
+
+    IF UPDATING OR DELETING THEN
+        v_antes := '{"paciente_id": ' || :OLD.PACIENTE_ID 
+                || ', "dni": "' || :OLD.DNI 
+                || '", "nombres": "' || :OLD.NOMBRES 
+                || '", "apellidos": "' || :OLD.APELLIDOS 
+                || '", "telefono": "' || :OLD.TELEFONO 
+                || '", "estado": "' || :OLD.ESTADO || '"}';
+    END IF;
+
+    IF INSERTING OR UPDATING THEN
+        v_despues := '{"paciente_id": ' || :NEW.PACIENTE_ID 
+                  || ', "dni": "' || :NEW.DNI 
+                  || '", "nombres": "' || :NEW.NOMBRES 
+                  || '", "apellidos": "' || :NEW.APELLIDOS 
+                  || '", "telefono": "' || :NEW.TELEFONO 
+                  || '", "estado": "' || :NEW.ESTADO || '"}';
+    END IF;
+
+    INSERT INTO APP_CLINICA.AUDITORIA (
+        AUDITORIA_ID, USUARIO_ID, TABLA_AFECTADA, OPERACION, 
+        REGISTRO_ID, DATOS_ANTES, DATOS_DESPUES
+    ) VALUES (
+        SEG_CLINICA.SEQ_AUDITORIA.NEXTVAL, -1, 'PACIENTES', v_operacion, 
+        v_registro_id, v_antes, v_despues
+    );
+END;
+/
+
+
+-- ==============================================================================
+-- 3. VISTAS (5 Requeridas)
+-- ==============================================================================
+
+-- VW_AGENDA_DIARIA: Reporte legible de la agenda general de citas
+CREATE OR REPLACE VIEW APP_CLINICA.VW_AGENDA_DIARIA AS
+SELECT c.FECHA_CITA, c.HORA_INICIO, c.HORA_FIN, 
+       p.NOMBRES || ' ' || p.APELLIDOS AS PACIENTE,
+       m.NOMBRES || ' ' || m.APELLIDOS AS MEDICO,
+       e.NOMBRE AS ESTADO_CITA
+FROM APP_CLINICA.CITAS c
+JOIN APP_CLINICA.PACIENTES p ON c.PACIENTE_ID = p.PACIENTE_ID
+JOIN APP_CLINICA.MEDICOS m ON c.MEDICO_ID = m.MEDICO_ID
+JOIN APP_CLINICA.ESTADOS_CITA e ON c.ESTADO_CITA_ID = e.ESTADO_CITA_ID;
+
+-- VW_USUARIOS_ACTIVOS: Listado de usuarios activos excluyendo contraseñas y hashes
+CREATE OR REPLACE VIEW SEG_CLINICA.VW_USUARIOS_ACTIVOS AS
+SELECT u.USUARIO_ID, u.USERNAME, u.NOMBRE_COMPLETO, u.EMAIL, r.NOMBRE AS ROL, u.ESTADO
+FROM SEG_CLINICA.USUARIOS u
+JOIN SEG_CLINICA.ROLES r ON u.ROL_ID = r.ROL_ID;
+
+-- VW_DISPONIBILIDAD_MEDICO: Muestra horarios y especialidades de médicos activos
+CREATE OR REPLACE VIEW APP_CLINICA.VW_DISPONIBILIDAD_MEDICO AS
+SELECT 
+    h.MEDICO_ID,
+    m.NOMBRES || ' ' || m.APELLIDOS AS MEDICO,
+    e.NOMBRE AS ESPECIALIDAD,
+    h.DIA_SEMANA,
+    CASE h.DIA_SEMANA
+        WHEN 1 THEN 'Lunes'
+        WHEN 2 THEN 'Martes'
+        WHEN 3 THEN 'Miercoles'
+        WHEN 4 THEN 'Jueves'
+        WHEN 5 THEN 'Viernes'
+        WHEN 6 THEN 'Sabado'
+        WHEN 7 THEN 'Domingo'
+    END AS DIA_NOMBRE,
+    h.HORA_INICIO,
+    h.HORA_FIN,
+    h.DURACION_CITA_MIN,
+    h.ESTADO AS HORARIO_ESTADO
+FROM APP_CLINICA.HORARIOS_MEDICO h
+JOIN APP_CLINICA.MEDICOS m ON h.MEDICO_ID = m.MEDICO_ID
+JOIN APP_CLINICA.ESPECIALIDADES e ON m.ESPECIALIDAD_ID = e.ESPECIALIDAD_ID
+WHERE h.ESTADO = 'A' AND m.ESTADO = 'A';
+
+-- VW_HISTORIAL_PACIENTE: Historial unificado de citas clínicas
+CREATE OR REPLACE VIEW APP_CLINICA.VW_HISTORIAL_PACIENTE AS
+SELECT 
+    c.CITA_ID,
+    c.PACIENTE_ID,
+    p.NOMBRES || ' ' || p.APELLIDOS AS PACIENTE,
+    p.DNI,
+    c.FECHA_CITA,
+    c.HORA_INICIO,
+    c.HORA_FIN,
+    m.NOMBRES || ' ' || m.APELLIDOS AS MEDICO,
+    esp.NOMBRE AS ESPECIALIDAD,
+    ec.NOMBRE AS ESTADO_CITA,
+    c.MOTIVO_CONSULTA,
+    c.OBSERVACIONES,
+    c.FECHA_CREACION
+FROM APP_CLINICA.CITAS c
+JOIN APP_CLINICA.PACIENTES p ON c.PACIENTE_ID = p.PACIENTE_ID
+JOIN APP_CLINICA.MEDICOS m ON c.MEDICO_ID = m.MEDICO_ID
+JOIN APP_CLINICA.ESPECIALIDADES esp ON c.ESPECIALIDAD_ID = esp.ESPECIALIDAD_ID
+JOIN APP_CLINICA.ESTADOS_CITA ec ON c.ESTADO_CITA_ID = ec.ESTADO_CITA_ID
+ORDER BY c.FECHA_CITA DESC, c.HORA_INICIO DESC;
+
+-- VW_RESUMEN_CITAS: Consolidado de citas agrupado por médico, especialidad y estado
+CREATE OR REPLACE VIEW APP_CLINICA.VW_RESUMEN_CITAS AS
+SELECT 
+    m.MEDICO_ID,
+    m.NOMBRES || ' ' || m.APELLIDOS AS MEDICO,
+    esp.NOMBRE AS ESPECIALIDAD,
+    ec.NOMBRE AS ESTADO_CITA,
+    COUNT(*) AS TOTAL_CITAS,
+    MIN(c.FECHA_CITA) AS PRIMERA_CITA,
+    MAX(c.FECHA_CITA) AS ULTIMA_CITA
+FROM APP_CLINICA.CITAS c
+JOIN APP_CLINICA.MEDICOS m ON c.MEDICO_ID = m.MEDICO_ID
+JOIN APP_CLINICA.ESPECIALIDADES esp ON c.ESPECIALIDAD_ID = esp.ESPECIALIDAD_ID
+JOIN APP_CLINICA.ESTADOS_CITA ec ON c.ESTADO_CITA_ID = ec.ESTADO_CITA_ID
+GROUP BY m.MEDICO_ID, m.NOMBRES, m.APELLIDOS, esp.NOMBRE, ec.NOMBRE;
+
+
+-- ==============================================================================
+-- 4. TAREAS PROGRAMADAS / JOBS (2 Requeridos)
+-- ==============================================================================
+
+-- JOB_RECORDATORIOS_24H: Notifica a los pacientes con cita en las siguientes 24 horas
+BEGIN
+    BEGIN
+        DBMS_SCHEDULER.drop_job(job_name => 'APP_CLINICA.JOB_RECORDATORIOS_24H', force => TRUE);
+    EXCEPTION
+        WHEN OTHERS THEN NULL;
+    END;
+
+    DBMS_SCHEDULER.create_job (
+        job_name        => 'APP_CLINICA.JOB_RECORDATORIOS_24H',
+        job_type        => 'PLSQL_BLOCK',
+        job_action      => '
+            BEGIN
+                FOR r IN (
+                    SELECT c.CITA_ID, c.PACIENTE_ID, p.NOMBRES
+                    FROM APP_CLINICA.CITAS c
+                    JOIN APP_CLINICA.PACIENTES p ON c.PACIENTE_ID = p.PACIENTE_ID
+                    WHERE c.ESTADO_CITA_ID = 2 -- Confirmada
+                      AND TRUNC(c.FECHA_CITA) = TRUNC(SYSDATE + 1)
+                      AND c.CITA_ID NOT IN (SELECT CITA_ID FROM APP_CLINICA.NOTIFICACIONES WHERE TIPO = ''RECORDATORIO'')
+                ) LOOP
+                    INSERT INTO APP_CLINICA.NOTIFICACIONES (NOTIFICACION_ID, CITA_ID, PACIENTE_ID, TIPO, MENSAJE)
+                    VALUES (APP_CLINICA.SEQ_NOTIFICACIONES.NEXTVAL, r.CITA_ID, r.PACIENTE_ID, ''RECORDATORIO'', ''Recordatorio: Su cita médica es mañana.'');
+                END LOOP;
+                COMMIT;
+            END;',
+        start_date      => SYSTIMESTAMP,
+        repeat_interval => 'freq=hourly', -- Cada 1 hora
+        enabled         => TRUE
+    );
+END;
+/
+
+-- JOB_EXPIRAR_SESIONES: Expira automáticamente sesiones inactivas pasadas su fecha de expiración
+BEGIN
+    BEGIN
+        DBMS_SCHEDULER.drop_job(job_name => 'SEG_CLINICA.JOB_EXPIRAR_SESIONES', force => TRUE);
+    EXCEPTION
+        WHEN OTHERS THEN NULL;
+    END;
+
+    DBMS_SCHEDULER.create_job (
+        job_name        => 'SEG_CLINICA.JOB_EXPIRAR_SESIONES',
+        job_type        => 'PLSQL_BLOCK',
+        job_action      => '
+            BEGIN
+                UPDATE SEG_CLINICA.SESIONES 
+                SET ESTADO = ''E'' 
+                WHERE ESTADO = ''A'' 
+                  AND FECHA_EXPIRACION < SYSTIMESTAMP;
+                COMMIT;
+            END;',
+        start_date      => SYSTIMESTAMP,
+        repeat_interval => 'freq=minutely;interval=30', -- Cada 30 minutos
+        enabled         => TRUE
+    );
+END;
+/
+
+COMMIT;
