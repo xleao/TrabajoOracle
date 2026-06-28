@@ -94,9 +94,11 @@ export default function RecepcionAgenda() {
       // Or we can get from /api/citas/por-estado?estadoCitaId=1&fechaInicio=...
       // Since server.js has /api/citas/por-estado, let's query it.
       // Let's search from 2026-05-19 to 2026-07-19
-      const res = await axios.get('http://localhost:5000/api/citas/por-estado?estadoCitaId=1&fechaInicio=2026-05-19&fechaFin=2026-07-19');
-      // Let's also fetch other states (Confirmada=2, En Atención=3, Atendida=4, Cancelada=5) to have a list
-      const res2 = await axios.get('http://localhost:5000/api/citas/por-estado?estadoCitaId=2&fechaInicio=2026-05-19&fechaFin=2026-07-19');
+      const today = new Date();
+      const fechaInicio = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().substring(0, 10);
+      const fechaFin = new Date(today.getFullYear(), today.getMonth() + 2, 0).toISOString().substring(0, 10);
+      const res = await axios.get(`http://localhost:5000/api/citas/por-estado?estadoCitaId=1&fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`);
+      const res2 = await axios.get(`http://localhost:5000/api/citas/por-estado?estadoCitaId=2&fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`);
       
       const combined = [
         ...(res.data.data || []).map(c => ({ ...c, estadoNombre: 'Pendiente' })),

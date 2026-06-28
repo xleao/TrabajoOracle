@@ -62,37 +62,15 @@ export default function MedicoAgenda() {
   };
 
   const handleOpenHistory = async (cita) => {
-    setSelectedPaciente({
-      pacienteId: cita.PACIENTE_ID || cita.pacienteId || 1, // fallback if ID is not direct
-      nombre: cita.PACIENTE
-    });
-    
-    // We need to resolve patient ID. In FN_AGENDA_DIARIA, it returns PACIENTE name.
-    // Let's search patient by name to extract their PACIENTE_ID or we can query using a search.
-    // Wait, let's look at FN_AGENDA_DIARIA in 10_patch_strict_plsql.sql line 32:
-    // SELECT c.CITA_ID, c.HORA_INICIO, c.HORA_FIN, p.NOMBRES || ' ' || p.APELLIDOS AS PACIENTE, e.NOMBRE AS ESTADO_CITA, c.MOTIVO_CONSULTA
-    // Ah! It doesn't return PACIENTE_ID!
-    // But wait! How can we get the PACIENTE_ID?
-    // We can search for the patient by name using `FN_BUSCAR_PACIENTE` with the name as filter!
-    // This is a brilliant and robust workaround!
+    setSelectedPaciente({ NOMBRES: cita.PACIENTE, APELLIDOS: '', DNI: '' });
     setLoadingHistory(true);
     setShowHistoryModal(true);
     setPacienteHistory([]);
 
     try {
-      // 1. Find patient ID by name
-      const searchRes = await axios.get(`http://localhost:5000/api/pacientes?filtro=${cita.PACIENTE}`);
-      if (searchRes.data.success && searchRes.data.data.length > 0) {
-        const pId = searchRes.data.data[0].PACIENTE_ID;
-        setSelectedPaciente(searchRes.data.data[0]);
-        
-        // 2. Fetch history
-        const histRes = await axios.get(`http://localhost:5000/api/citas/historial-paciente?pacienteId=${pId}`);
-        if (histRes.data.success) {
-          setPacienteHistory(histRes.data.data);
-        }
-      } else {
-        setErrorMsg('No se pudo ubicar el identificador único del paciente.');
+      const histRes = await axios.get(`http://localhost:5000/api/citas/historial-paciente?pacienteId=${cita.PACIENTE_ID}`);
+      if (histRes.data.success) {
+        setPacienteHistory(histRes.data.data);
       }
     } catch (err) {
       console.error('Error loading history:', err);
@@ -238,7 +216,7 @@ export default function MedicoAgenda() {
                       
                       {/* Content block */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        <div style={{ display: 'flex', justifyBetween: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                           <strong style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>
                             {new Date(h.FECHA_CITA).toLocaleDateString('es-ES')} ({h.HORA_INICIO} - {h.HORA_FIN})
                           </strong>

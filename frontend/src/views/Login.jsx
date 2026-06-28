@@ -21,7 +21,7 @@ export default function Login() {
       const response = await axios.post('http://localhost:5000/api/auth/login', { username, password });
       if (response.data.success) {
         login(response.data.user, response.data.token);
-        navigate('/');
+        navigate('/dashboard');
       } else {
         setError(response.data.message);
       }

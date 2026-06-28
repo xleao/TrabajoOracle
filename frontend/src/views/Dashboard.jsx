@@ -265,7 +265,7 @@ export default function Dashboard() {
                 {stats.notificaciones.length > 0 ? (
                   stats.notificaciones.map(notif => (
                     <div key={notif.NOTIFICACION_ID} style={{ padding: '1rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '0.5rem', backgroundColor: 'var(--bg-main)' }}>
-                      <div style={{ display: 'flex', justifyBetween: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                         <span className="badge badge-warning">{notif.TIPO}</span>
                         <button onClick={() => handleMarkAsRead(notif.NOTIFICACION_ID)} style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>Entendido</button>
                       </div>

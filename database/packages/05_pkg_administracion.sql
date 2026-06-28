@@ -151,8 +151,9 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_ADMINISTRACION AS
         v_hash RAW(64);
     BEGIN
         IF p_password IS NOT NULL THEN
-            -- Llama a la función del otro esquema vía sinónimo o directamente
             v_hash := SEG_CLINICA.PKG_SEGURIDAD.FN_HASH_PASSWORD(p_password);
+        ELSIF p_accion = 'I' THEN
+            RAISE_APPLICATION_ERROR(-20006, 'La contraseña es obligatoria al registrar un usuario.');
         END IF;
 
         IF p_accion = 'I' THEN

@@ -85,7 +85,6 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CITAS AS
             'N'
         );
         
-        COMMIT;
     END SP_AGENDAR_CITA;
 
     PROCEDURE SP_CANCELAR_CITA(
@@ -120,7 +119,6 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CITAS AS
             'N'
         );
         
-        COMMIT;
     END SP_CANCELAR_CITA;
 
     PROCEDURE SP_REPROGRAMAR_CITA(
@@ -186,7 +184,7 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CITAS AS
             LEFT JOIN APP_CLINICA.CITAS c ON hm.MEDICO_ID = c.MEDICO_ID 
                   AND c.FECHA_CITA = p_fecha AND c.ESTADO_CITA_ID IN (1,2)
             WHERE hm.MEDICO_ID = p_medico_id
-              AND hm.DIA_SEMANA = TO_CHAR(p_fecha, 'D') -- Oracle 'D' retorna 1-7
+              AND hm.DIA_SEMANA = TO_CHAR(p_fecha, 'D') -- 1=Domingo,2=Lunes,...,7=Sábado (Oracle native, coincide con datos almacenados)
               AND hm.ESTADO = 'A';
         RETURN v_cursor;
     END FN_OBTENER_FRANJAS_LIBRES;

@@ -12,7 +12,9 @@ import {
   User as UserIcon,
   Menu,
   BookOpen,
-  Bell
+  Bell,
+  History,
+  Search
 } from 'lucide-react';
 
 export default function Layout() {
@@ -32,7 +34,7 @@ export default function Layout() {
     
     // Rutas comunes
     const adminRoutes = [
-      { path: '/', name: 'Dashboard', icon: <Activity size={20} /> },
+      { path: '/dashboard', name: 'Dashboard', icon: <Activity size={20} /> },
       { path: '/admin/pacientes', name: 'Gestión Pacientes', icon: <Users size={20} /> },
       { path: '/admin/medicos', name: 'Gestión Médicos', icon: <Stethoscope size={20} /> },
       { path: '/admin/especialidades', name: 'Especialidades', icon: <BookOpen size={20} /> },
@@ -42,14 +44,17 @@ export default function Layout() {
     ];
 
     const receptionistRoutes = [
-      { path: '/', name: 'Panel Recepción', icon: <Activity size={20} /> },
+      { path: '/dashboard', name: 'Panel Recepción', icon: <Activity size={20} /> },
       { path: '/recepcion/agenda', name: 'Agendar Cita', icon: <Calendar size={20} /> },
       { path: '/recepcion/pacientes', name: 'Directorio Pacientes', icon: <Users size={20} /> },
+      { path: '/recepcion/historial', name: 'Historial Clínico', icon: <History size={20} /> },
+      { path: '/recepcion/consultas', name: 'Consultas', icon: <Search size={20} /> },
       { path: '/recepcion/notificaciones', name: 'Notificaciones', icon: <Bell size={20} /> },
+      { path: '/recepcion/reportes', name: 'Reportes', icon: <BarChart size={20} /> },
     ];
 
     const doctorRoutes = [
-      { path: '/', name: 'Inicio', icon: <Activity size={20} /> },
+      { path: '/dashboard', name: 'Inicio', icon: <Activity size={20} /> },
       { path: '/medico/agenda', name: 'Mi Agenda', icon: <Calendar size={20} /> },
     ];
 
@@ -57,7 +62,7 @@ export default function Layout() {
     if (role === 'RECEPCIONISTA') return receptionistRoutes;
     if (role === 'MEDICO') return doctorRoutes;
     
-    return [{ path: '/', name: 'Inicio', icon: <Activity size={20} /> }]; // Fallback
+    return [{ path: '/dashboard', name: 'Inicio', icon: <Activity size={20} /> }]; // Fallback
   };
 
   const menu = getMenuByRole();

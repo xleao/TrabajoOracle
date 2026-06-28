@@ -42,21 +42,63 @@ END;
 
 -- TRG_IMPEDIR_EMPATE_CITA: Evita traslape de citas para el mismo médico
 CREATE OR REPLACE TRIGGER APP_CLINICA.TRG_IMPEDIR_EMPATE_CITA
-BEFORE INSERT OR UPDATE ON APP_CLINICA.CITAS
-FOR EACH ROW
-DECLARE
-    v_disponible NUMBER;
-BEGIN
-    -- Solo verificar si es una cita activa (Pendiente = 1 o Confirmada = 2)
-    IF :NEW.ESTADO_CITA_ID IN (1, 2) THEN
-        v_disponible := APP_CLINICA.PKG_CITAS.FN_VERIFICAR_DISPONIBILIDAD(
-            :NEW.MEDICO_ID, :NEW.FECHA_CITA, :NEW.HORA_INICIO, :NEW.HORA_FIN
-        );
-        IF v_disponible = 0 THEN
-            RAISE_APPLICATION_ERROR(-20002, 'Violación de integridad: El médico ya tiene una cita reservada en ese horario.');
+FOR INSERT OR UPDATE ON APP_CLINICA.CITAS
+COMPOUND TRIGGER
+
+    TYPE t_cita_rec IS RECORD (
+        medico_id NUMBER,
+        fecha_cita DATE,
+        hora_inicio VARCHAR2(5),
+        hora_fin VARCHAR2(5),
+        estado_cita_id NUMBER
+    );
+    TYPE t_citas_tab IS TABLE OF t_cita_rec INDEX BY PLS_INTEGER;
+    v_citas t_citas_tab;
+    v_idx PLS_INTEGER := 0;
+
+    BEFORE STATEMENT IS
+    BEGIN
+        v_idx := 0;
+        v_citas.DELETE;
+    END BEFORE STATEMENT;
+
+    BEFORE EACH ROW IS
+    BEGIN
+        -- Solo verificar si es una cita activa (Pendiente = 1 o Confirmada = 2)
+        IF :NEW.ESTADO_CITA_ID IN (1, 2) THEN
+            v_idx := v_idx + 1;
+            v_citas(v_idx).medico_id := :NEW.MEDICO_ID;
+            v_citas(v_idx).fecha_cita := :NEW.FECHA_CITA;
+            v_citas(v_idx).hora_inicio := :NEW.HORA_INICIO;
+            v_citas(v_idx).hora_fin := :NEW.HORA_FIN;
+            v_citas(v_idx).estado_cita_id := :NEW.ESTADO_CITA_ID;
         END IF;
-    END IF;
-END;
+    END BEFORE EACH ROW;
+
+    AFTER STATEMENT IS
+        v_count NUMBER;
+    BEGIN
+        FOR i IN 1 .. v_idx LOOP
+            -- Al estar en AFTER STATEMENT, la tabla CITAS ya no muta
+            SELECT COUNT(1) INTO v_count
+            FROM APP_CLINICA.CITAS
+            WHERE MEDICO_ID = v_citas(i).medico_id
+              AND FECHA_CITA = v_citas(i).fecha_cita
+              AND ESTADO_CITA_ID IN (1, 2)
+              AND (
+                    (v_citas(i).hora_inicio >= HORA_INICIO AND v_citas(i).hora_inicio < HORA_FIN) OR
+                    (v_citas(i).hora_fin > HORA_INICIO AND v_citas(i).hora_fin <= HORA_FIN) OR
+                    (v_citas(i).hora_inicio <= HORA_INICIO AND v_citas(i).hora_fin >= HORA_FIN)
+                  );
+            
+            -- Puesto que el registro ya fue insertado/actualizado, 
+            -- v_count será al menos 1 (la propia cita). Si es mayor a 1, hay empalme.
+            IF v_count > 1 THEN
+                RAISE_APPLICATION_ERROR(-20002, 'Violación de integridad: El médico ya tiene una cita reservada en ese horario.');
+            END IF;
+        END LOOP;
+    END AFTER STATEMENT;
+END TRG_IMPEDIR_EMPATE_CITA;
 /
 
 -- TRG_AUDITORIA_CITAS: Registra en SEG_CLINICA.AUDITORIA cada inserción/cambio/eliminación de cita
@@ -179,13 +221,13 @@ SELECT
     e.NOMBRE AS ESPECIALIDAD,
     h.DIA_SEMANA,
     CASE h.DIA_SEMANA
-        WHEN 1 THEN 'Lunes'
-        WHEN 2 THEN 'Martes'
-        WHEN 3 THEN 'Miercoles'
-        WHEN 4 THEN 'Jueves'
-        WHEN 5 THEN 'Viernes'
-        WHEN 6 THEN 'Sabado'
-        WHEN 7 THEN 'Domingo'
+        WHEN 1 THEN 'Domingo'
+        WHEN 2 THEN 'Lunes'
+        WHEN 3 THEN 'Martes'
+        WHEN 4 THEN 'Miercoles'
+        WHEN 5 THEN 'Jueves'
+        WHEN 6 THEN 'Viernes'
+        WHEN 7 THEN 'Sabado'
     END AS DIA_NOMBRE,
     h.HORA_INICIO,
     h.HORA_FIN,

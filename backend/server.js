@@ -162,6 +162,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     const token = sessionResult.outBinds.token;
     await connection.close();
+    connection = null;
 
     // Re-verify to get standard session data block using the new token function
     const list = await executeWithCursor(
@@ -462,6 +463,9 @@ app.get('/api/citas/disponibilidad', authenticateToken, async (req, res) => {
 // Agendar Cita
 app.post('/api/citas/agendar', authenticateToken, async (req, res) => {
   const { pacienteId, medicoId, especialidadId, fechaCita, horaInicio, horaFin, motivoConsulta } = req.body;
+  if (!pacienteId || !medicoId || !especialidadId || !fechaCita || !horaInicio || !horaFin) {
+    return res.status(400).json({ success: false, message: 'Faltan campos obligatorios para agendar la cita' });
+  }
   const usuarioCreacion = req.user.USUARIO_ID;
 
   try {
@@ -513,6 +517,9 @@ app.post('/api/citas/cancelar', authenticateToken, async (req, res) => {
 // Reprogramar Cita
 app.post('/api/citas/reprogramar', authenticateToken, async (req, res) => {
   const { citaId, nuevaFecha, nuevaHoraInicio, nuevaHoraFin } = req.body;
+  if (!citaId || !nuevaFecha || !nuevaHoraInicio || !nuevaHoraFin) {
+    return res.status(400).json({ success: false, message: 'Faltan campos obligatorios para reprogramar' });
+  }
   const usuarioModificacion = req.user.USUARIO_ID;
 
   try {
@@ -560,6 +567,12 @@ app.get('/api/citas/agenda-diaria', authenticateToken, async (req, res) => {
   if (!medicoId || !fecha) {
     return res.status(400).json({ success: false, message: 'Faltan medicoId y fecha' });
   }
+  
+  // Validar RFS-03: Un médico solo puede ver su propia agenda
+  if ((req.user.ROL_NAME === 'MEDICO' || req.user.ROL_ID === 3) && req.user.MEDICO_ID !== Number(medicoId)) {
+    return res.status(403).json({ success: false, message: 'Acceso denegado: Solo puedes consultar tu propia agenda.' });
+  }
+
   try {
     const list = await executeWithCursor(
       `BEGIN :ret := APP_CLINICA.PKG_CONSULTAS.FN_AGENDA_DIARIA(:medicoId, TO_DATE(:fecha, 'YYYY-MM-DD')); END;`,
@@ -642,7 +655,7 @@ app.get('/api/citas/por-estado', authenticateToken, async (req, res) => {
 
 app.get('/api/reportes/citas-por-medico', authenticateToken, async (req, res) => {
   const { fechaInicio, fechaFin } = req.query;
-  if (!fechaInicio || !fechaFin) return res.status(400).json({ message: 'Fechas requeridas' });
+  if (!fechaInicio || !fechaFin) return res.status(400).json({ success: false, message: 'Fechas requeridas' });
   try {
     const list = await executeWithCursor(
       `BEGIN :ret := APP_CLINICA.PKG_REPORTES.FN_RPT_CITAS_POR_MEDICO(TO_DATE(:fechaInicio, 'YYYY-MM-DD'), TO_DATE(:fechaFin, 'YYYY-MM-DD')); END;`,
@@ -656,7 +669,7 @@ app.get('/api/reportes/citas-por-medico', authenticateToken, async (req, res) =>
 
 app.get('/api/reportes/citas-por-especialidad', authenticateToken, async (req, res) => {
   const { fechaInicio, fechaFin } = req.query;
-  if (!fechaInicio || !fechaFin) return res.status(400).json({ message: 'Fechas requeridas' });
+  if (!fechaInicio || !fechaFin) return res.status(400).json({ success: false, message: 'Fechas requeridas' });
   try {
     const list = await executeWithCursor(
       `BEGIN :ret := APP_CLINICA.PKG_REPORTES.FN_RPT_CITAS_POR_ESPECIALIDAD(TO_DATE(:fechaInicio, 'YYYY-MM-DD'), TO_DATE(:fechaFin, 'YYYY-MM-DD')); END;`,
@@ -670,7 +683,7 @@ app.get('/api/reportes/citas-por-especialidad', authenticateToken, async (req, r
 
 app.get('/api/reportes/cancelaciones', authenticateToken, async (req, res) => {
   const { fechaInicio, fechaFin } = req.query;
-  if (!fechaInicio || !fechaFin) return res.status(400).json({ message: 'Fechas requeridas' });
+  if (!fechaInicio || !fechaFin) return res.status(400).json({ success: false, message: 'Fechas requeridas' });
   try {
     const list = await executeWithCursor(
       `BEGIN :ret := APP_CLINICA.PKG_REPORTES.FN_RPT_CANCELACIONES(TO_DATE(:fechaInicio, 'YYYY-MM-DD'), TO_DATE(:fechaFin, 'YYYY-MM-DD')); END;`,
@@ -682,9 +695,37 @@ app.get('/api/reportes/cancelaciones', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/reportes/cancelaciones-medico', authenticateToken, async (req, res) => {
+  const { fechaInicio, fechaFin } = req.query;
+  if (!fechaInicio || !fechaFin) return res.status(400).json({ success: false, message: 'Fechas requeridas' });
+  try {
+    const list = await executeWithCursor(
+      `BEGIN :ret := APP_CLINICA.PKG_REPORTES.FN_RPT_CANCEL_POR_MEDICO(TO_DATE(:fechaInicio, 'YYYY-MM-DD'), TO_DATE(:fechaFin, 'YYYY-MM-DD')); END;`,
+      { fechaInicio, fechaFin }
+    );
+    res.json({ success: true, data: list });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/reportes/cancelaciones-paciente', authenticateToken, async (req, res) => {
+  const { fechaInicio, fechaFin } = req.query;
+  if (!fechaInicio || !fechaFin) return res.status(400).json({ success: false, message: 'Fechas requeridas' });
+  try {
+    const list = await executeWithCursor(
+      `BEGIN :ret := APP_CLINICA.PKG_REPORTES.FN_RPT_CANCEL_POR_PACIENTE(TO_DATE(:fechaInicio, 'YYYY-MM-DD'), TO_DATE(:fechaFin, 'YYYY-MM-DD')); END;`,
+      { fechaInicio, fechaFin }
+    );
+    res.json({ success: true, data: list });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.get('/api/reportes/pacientes-atendidos', authenticateToken, async (req, res) => {
   const { fechaInicio, fechaFin } = req.query;
-  if (!fechaInicio || !fechaFin) return res.status(400).json({ message: 'Fechas requeridas' });
+  if (!fechaInicio || !fechaFin) return res.status(400).json({ success: false, message: 'Fechas requeridas' });
   try {
     const list = await executeWithCursor(
       `BEGIN :ret := APP_CLINICA.PKG_REPORTES.FN_RPT_PACIENTES_ATENDIDOS(TO_DATE(:fechaInicio, 'YYYY-MM-DD'), TO_DATE(:fechaFin, 'YYYY-MM-DD')); END;`,
@@ -698,7 +739,7 @@ app.get('/api/reportes/pacientes-atendidos', authenticateToken, async (req, res)
 
 app.get('/api/reportes/ocupacion-horaria', authenticateToken, async (req, res) => {
   const { medicoId, fechaInicio, fechaFin } = req.query;
-  if (!medicoId || !fechaInicio || !fechaFin) return res.status(400).json({ message: 'Faltan parámetros' });
+  if (!medicoId || !fechaInicio || !fechaFin) return res.status(400).json({ success: false, message: 'Faltan parámetros' });
   try {
     const list = await executeWithCursor(
       `BEGIN :ret := APP_CLINICA.PKG_REPORTES.FN_RPT_OCUPACION_HORARIA(:medicoId, TO_DATE(:fechaInicio, 'YYYY-MM-DD'), TO_DATE(:fechaFin, 'YYYY-MM-DD')); END;`,

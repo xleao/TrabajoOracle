@@ -24,7 +24,7 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CONSULTAS AS
         v_cursor SYS_REFCURSOR;
     BEGIN
         OPEN v_cursor FOR
-            SELECT c.CITA_ID, c.HORA_INICIO, c.HORA_FIN, 
+            SELECT c.CITA_ID, c.PACIENTE_ID, c.HORA_INICIO, c.HORA_FIN,
                    p.NOMBRES || ' ' || p.APELLIDOS AS PACIENTE,
                    e.NOMBRE AS ESTADO_CITA, c.MOTIVO_CONSULTA
             FROM APP_CLINICA.CITAS c
@@ -40,9 +40,10 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CONSULTAS AS
         v_cursor SYS_REFCURSOR;
     BEGIN
         OPEN v_cursor FOR
-            SELECT c.CITA_ID, c.FECHA_CITA, c.HORA_INICIO, 
+            SELECT c.CITA_ID, c.FECHA_CITA, c.HORA_INICIO, c.HORA_FIN,
                    m.NOMBRES || ' ' || m.APELLIDOS AS MEDICO,
-                   esp.NOMBRE AS ESPECIALIDAD, e.NOMBRE AS ESTADO_CITA
+                   esp.NOMBRE AS ESPECIALIDAD, e.NOMBRE AS ESTADO_CITA,
+                   c.MOTIVO_CONSULTA, c.OBSERVACIONES
             FROM APP_CLINICA.CITAS c
             JOIN APP_CLINICA.MEDICOS m ON c.MEDICO_ID = m.MEDICO_ID
             JOIN APP_CLINICA.ESPECIALIDADES esp ON c.ESPECIALIDAD_ID = esp.ESPECIALIDAD_ID
@@ -74,10 +75,13 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CONSULTAS AS
         v_cursor SYS_REFCURSOR;
     BEGIN
         OPEN v_cursor FOR
-            SELECT c.CITA_ID, c.FECHA_CITA, c.HORA_INICIO,
-                   p.NOMBRES || ' ' || p.APELLIDOS AS PACIENTE
+            SELECT c.CITA_ID, c.FECHA_CITA, c.HORA_INICIO, c.HORA_FIN,
+                   c.MEDICO_ID,
+                   p.NOMBRES || ' ' || p.APELLIDOS AS PACIENTE,
+                   m.NOMBRES || ' ' || m.APELLIDOS AS MEDICO
             FROM APP_CLINICA.CITAS c
             JOIN APP_CLINICA.PACIENTES p ON c.PACIENTE_ID = p.PACIENTE_ID
+            JOIN APP_CLINICA.MEDICOS m ON c.MEDICO_ID = m.MEDICO_ID
             WHERE c.ESTADO_CITA_ID = p_estado_cita_id
               AND (c.MEDICO_ID = p_medico_id OR p_medico_id IS NULL)
               AND TRUNC(c.FECHA_CITA) BETWEEN TRUNC(p_fecha_inicio) AND TRUNC(p_fecha_fin)

@@ -410,7 +410,7 @@ export default function AdminPacientes() {
                   .filter(c => !filtroHistDesde || new Date(c.FECHA_CITA) >= new Date(filtroHistDesde))
                   .filter(c => !filtroHistHasta || new Date(c.FECHA_CITA) <= new Date(filtroHistHasta + 'T23:59:59'));
                 return filtradas.length > 0 ? filtradas.map((c, idx) => (
-                  <div key={idx} style={{ padding: '1.25rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--bg-main)', display: 'flex', justifyBetween: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                  <div key={idx} style={{ padding: '1.25rem', border: '1px solid var(--border-light)', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--bg-main)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <Calendar size={14} style={{ color: 'var(--primary)' }} />

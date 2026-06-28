@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Bell, CheckCircle, Filter } from 'lucide-react';
 
 const TIPO_BADGE = {
+  CONFIRMACION: 'badge-success',
   RECORDATORIO: 'badge-info',
   CANCELACION: 'badge-danger',
   REPROGRAMACION: 'badge-warning',
@@ -84,6 +85,7 @@ export default function Notificaciones() {
           onChange={(e) => setFiltroTipo(e.target.value)}
         >
           <option value="">Todos los tipos</option>
+          <option value="CONFIRMACION">Confirmación</option>
           <option value="RECORDATORIO">Recordatorio</option>
           <option value="CANCELACION">Cancelación</option>
           <option value="REPROGRAMACION">Reprogramación</option>

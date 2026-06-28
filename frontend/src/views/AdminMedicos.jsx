@@ -151,10 +151,10 @@ export default function AdminMedicos() {
     }
   };
 
-  const filteredMedicos = medicos.filter(m => 
-    `${m.NOMBRES} ${m.APELLIDOS}`.toLowerCase().includes(filtro.toLowerCase()) || 
-    m.NRO_COLEGIATURA.toLowerCase().includes(filtro.toLowerCase()) ||
-    m.ESPECIALIDAD_NOMBRE.toLowerCase().includes(filtro.toLowerCase())
+  const filteredMedicos = medicos.filter(m =>
+    `${m.NOMBRES} ${m.APELLIDOS}`.toLowerCase().includes(filtro.toLowerCase()) ||
+    (m.NRO_COLEGIATURA?.toLowerCase() || '').includes(filtro.toLowerCase()) ||
+    (m.ESPECIALIDAD_NOMBRE?.toLowerCase() || '').includes(filtro.toLowerCase())
   );
 
   return (

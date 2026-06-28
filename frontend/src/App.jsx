@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import LandingPage from './views/LandingPage';
 import Login from './views/Login';
 import Layout from './components/Layout';
 import Dashboard from './views/Dashboard';
@@ -10,6 +11,8 @@ import AdminUsuarios from './views/AdminUsuarios';
 import AdminReportes from './views/AdminReportes';
 import AdminEspecialidades from './views/AdminEspecialidades';
 import RecepcionAgenda from './views/RecepcionAgenda';
+import RecepcionHistorial from './views/RecepcionHistorial';
+import RecepcionConsultas from './views/RecepcionConsultas';
 import Notificaciones from './views/Notificaciones';
 import MedicoAgenda from './views/MedicoAgenda';
 
@@ -26,9 +29,10 @@ const ProtectedRoute = ({ children }) => {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Dashboard />} />
+      <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+        <Route path="dashboard" element={<Dashboard />} />
         
         {/* Admin Routes */}
         <Route path="admin/pacientes" element={<AdminPacientes />} />
@@ -41,7 +45,10 @@ function AppRoutes() {
         {/* Recepcion Routes */}
         <Route path="recepcion/agenda" element={<RecepcionAgenda />} />
         <Route path="recepcion/pacientes" element={<AdminPacientes />} />
+        <Route path="recepcion/historial" element={<RecepcionHistorial />} />
+        <Route path="recepcion/consultas" element={<RecepcionConsultas />} />
         <Route path="recepcion/notificaciones" element={<Notificaciones />} />
+        <Route path="recepcion/reportes" element={<AdminReportes />} />
 
         {/* Medico Routes */}
         <Route path="medico/agenda" element={<MedicoAgenda />} />
