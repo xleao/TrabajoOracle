@@ -5,6 +5,7 @@ require('dotenv').config();
 
 // Config oracledb outFormat globally to return objects instead of arrays
 oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+oracledb.fetchAsString = [oracledb.CLOB];
 oracledb.autoCommit = true; // Auto commit on operations
 
 const app = express();
@@ -44,6 +45,7 @@ async function executeDb(query, binds = {}, options = {}) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.execute("ALTER SESSION SET NLS_TERRITORY = 'AMERICA'");
     const result = await connection.execute(query, binds, options);
     return result;
   } catch (err) {
@@ -64,6 +66,7 @@ async function executeWithCursor(query, binds = {}) {
   let connection;
   try {
     connection = await pool.getConnection();
+    await connection.execute("ALTER SESSION SET NLS_TERRITORY = 'AMERICA'");
     
     // Setup Cursor bind out parameter
     const localBinds = {
@@ -219,11 +222,20 @@ app.post('/api/auth/logout', authenticateToken, async (req, res) => {
 app.get('/api/pacientes', authenticateToken, async (req, res) => {
   const { filtro = '' } = req.query;
   try {
+    // Obtenemos todos los pacientes pasando filtro vacío a Oracle (sin modificar PL/SQL)
     const list = await executeWithCursor(
-      `BEGIN :ret := APP_CLINICA.PKG_CONSULTAS.FN_BUSCAR_PACIENTE(:filtro); END;`,
-      { filtro }
+      `BEGIN :ret := APP_CLINICA.PKG_CONSULTAS.FN_BUSCAR_PACIENTE(''); END;`
     );
-    res.json({ success: true, data: list });
+    
+    // Filtramos en JS para soportar búsqueda de nombre completo, DNI y orden desordenado
+    const terminos = filtro.trim().toLowerCase().split(/\s+/);
+    const filteredList = list.filter(p => {
+      const nombreCompleto = `${p.NOMBRES} ${p.APELLIDOS}`.toLowerCase();
+      const dni = (p.DNI || '').toLowerCase();
+      return terminos.every(term => nombreCompleto.includes(term) || dni.includes(term));
+    });
+
+    res.json({ success: true, data: filteredList });
   } catch (err) {
     console.error('Get pacientes error:', err);
     res.status(500).json({ success: false, message: err.message });
@@ -435,7 +447,7 @@ app.post('/api/usuarios/gestionar', authenticateToken, async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 3. CORE DE CITAS (PKG_CITAS)
+// 3. CORE DE CITAS (PKG_VALOR)
 // ----------------------------------------------------
 
 // Consultar franjas libres
@@ -447,7 +459,7 @@ app.get('/api/citas/disponibilidad', authenticateToken, async (req, res) => {
 
   try {
     const list = await executeWithCursor(
-      `BEGIN :ret := APP_CLINICA.PKG_CITAS.FN_OBTENER_FRANJAS_LIBRES(:medicoId, TO_DATE(:fecha, 'YYYY-MM-DD')); END;`,
+      `BEGIN :ret := APP_CLINICA.PKG_CONSULTAS.FN_OBTENER_FRANJAS_LIBRES(:medicoId, TO_DATE(:fecha, 'YYYY-MM-DD')); END;`,
       {
         medicoId: Number(medicoId),
         fecha
@@ -470,7 +482,7 @@ app.post('/api/citas/agendar', authenticateToken, async (req, res) => {
 
   try {
     const result = await executeDb(
-      `BEGIN APP_CLINICA.PKG_CITAS.SP_AGENDAR_CITA(
+      `BEGIN APP_CLINICA.PKG_VALOR.SP_AGENDAR_CITA(
          :pacienteId, :medicoId, :especialidadId, TO_DATE(:fechaCita, 'YYYY-MM-DD'),
          :horaInicio, :horaFin, :motivoConsulta, :usuarioCreacion, :citaId
        ); END;`,
@@ -500,7 +512,7 @@ app.post('/api/citas/cancelar', authenticateToken, async (req, res) => {
 
   try {
     await executeDb(
-      `BEGIN APP_CLINICA.PKG_CITAS.SP_CANCELAR_CITA(:citaId, :motivoCancelacion, :usuarioModificacion); END;`,
+      `BEGIN APP_CLINICA.PKG_VALOR.SP_CANCELAR_CITA(:citaId, :motivoCancelacion, :usuarioModificacion); END;`,
       {
         citaId: Number(citaId),
         motivoCancelacion,
@@ -524,7 +536,7 @@ app.post('/api/citas/reprogramar', authenticateToken, async (req, res) => {
 
   try {
     const result = await executeDb(
-      `BEGIN APP_CLINICA.PKG_CITAS.SP_REPROGRAMAR_CITA(
+      `BEGIN APP_CLINICA.PKG_VALOR.SP_REPROGRAMAR_CITA(
          :citaId, TO_DATE(:nuevaFecha, 'YYYY-MM-DD'), :nuevaHoraInicio, :nuevaHoraFin, 
          :usuarioModificacion, :nuevaCitaId
        ); END;`,
@@ -783,7 +795,7 @@ app.post('/api/notificaciones/marcar-leida', authenticateToken, async (req, res)
   const { notificacionId } = req.body;
   try {
     await executeDb(
-      `BEGIN APP_CLINICA.SP_MARCAR_NOTIF_LEIDA(:notificacionId); END;`,
+      `BEGIN APP_CLINICA.PKG_CONSULTAS.SP_MARCAR_NOTIF_LEIDA(:notificacionId); END;`,
       { notificacionId: Number(notificacionId) }
     );
     res.json({ success: true, message: 'Notificación marcada como leída' });

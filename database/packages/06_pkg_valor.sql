@@ -1,8 +1,8 @@
 -- ==============================================================================
--- SCRIPT 06: PAQUETE PKG_CITAS (ESPECIFICACIÓN Y CUERPO)
+-- SCRIPT 06: PAQUETE PKG_VALOR (ESPECIFICACIÓN Y CUERPO)
 -- ==============================================================================
 
-CREATE OR REPLACE PACKAGE APP_CLINICA.PKG_CITAS AS
+CREATE OR REPLACE PACKAGE APP_CLINICA.PKG_VALOR AS
     FUNCTION FN_VERIFICAR_DISPONIBILIDAD(
         p_medico_id IN NUMBER, p_fecha IN DATE, p_hora_inicio IN VARCHAR2, p_hora_fin IN VARCHAR2
     ) RETURN NUMBER;
@@ -22,11 +22,11 @@ CREATE OR REPLACE PACKAGE APP_CLINICA.PKG_CITAS AS
         p_nueva_hora_fin IN VARCHAR2, p_usuario_modificacion IN NUMBER, p_nueva_cita_id OUT NUMBER
     );
 
-    FUNCTION FN_OBTENER_FRANJAS_LIBRES(p_medico_id IN NUMBER, p_fecha IN DATE) RETURN SYS_REFCURSOR;
-END PKG_CITAS;
+    PROCEDURE SP_PROCESAR_RECORDATORIOS;
+END PKG_VALOR;
 /
 
-CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CITAS AS
+CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_VALOR AS
 
     FUNCTION FN_VERIFICAR_DISPONIBILIDAD(
         p_medico_id IN NUMBER, p_fecha IN DATE, p_hora_inicio IN VARCHAR2, p_hora_fin IN VARCHAR2
@@ -54,7 +54,12 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CITAS AS
         p_motivo_consulta IN VARCHAR2, p_usuario_creacion IN NUMBER, p_cita_id OUT NUMBER
     ) IS
         v_disponible NUMBER;
+        v_dummy NUMBER;
     BEGIN
+        -- Bloqueo explícito para evitar condiciones de carrera (empates)
+        -- a nivel de aplicación (respaldo del trigger)
+        SELECT 1 INTO v_dummy FROM APP_CLINICA.MEDICOS WHERE MEDICO_ID = p_medico_id FOR UPDATE NOWAIT;
+        
         v_disponible := FN_VERIFICAR_DISPONIBILIDAD(p_medico_id, p_fecha_cita, p_hora_inicio, p_hora_fin);
         
         IF v_disponible = 0 THEN
@@ -168,26 +173,24 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CITAS AS
         RAISE;
     END SP_REPROGRAMAR_CITA;
 
-    FUNCTION FN_OBTENER_FRANJAS_LIBRES(p_medico_id IN NUMBER, p_fecha IN DATE) RETURN SYS_REFCURSOR IS
-        v_cursor SYS_REFCURSOR;
+    PROCEDURE SP_PROCESAR_RECORDATORIOS IS
     BEGIN
-        -- Esta consulta simplificada asume bloques horarios según la duración configurada.
-        -- En PL/SQL avanzado, se generaría un calendario recursivo CTE filtrando citas cruzadas.
-        -- Para mantenerlo robusto pero simple, enviamos las citas ocupadas y el horario base.
-        OPEN v_cursor FOR
-            SELECT hm.HORA_INICIO AS HORARIO_INICIO_JORNADA,
-                   hm.HORA_FIN AS HORARIO_FIN_JORNADA,
-                   hm.DURACION_CITA_MIN,
-                   c.HORA_INICIO AS OCUPADO_DESDE,
-                   c.HORA_FIN AS OCUPADO_HASTA
-            FROM APP_CLINICA.HORARIOS_MEDICO hm
-            LEFT JOIN APP_CLINICA.CITAS c ON hm.MEDICO_ID = c.MEDICO_ID 
-                  AND c.FECHA_CITA = p_fecha AND c.ESTADO_CITA_ID IN (1,2)
-            WHERE hm.MEDICO_ID = p_medico_id
-              AND hm.DIA_SEMANA = TO_CHAR(p_fecha, 'D') -- 1=Domingo,2=Lunes,...,7=Sábado (Oracle native, coincide con datos almacenados)
-              AND hm.ESTADO = 'A';
-        RETURN v_cursor;
-    END FN_OBTENER_FRANJAS_LIBRES;
+        INSERT INTO APP_CLINICA.NOTIFICACIONES (
+            NOTIFICACION_ID, CITA_ID, PACIENTE_ID, TIPO, MENSAJE, FECHA_GENERACION, LEIDA
+        )
+        SELECT APP_CLINICA.SEQ_NOTIFICACIONES.NEXTVAL,
+               c.CITA_ID, c.PACIENTE_ID, 'RECORDATORIO',
+               UTL_RAW.CAST_TO_VARCHAR2(HEXTORAW('5265636f726461746f72696f3a205573746564207469656e6520756e612063697461206d61c3b1616e6120')) || TO_CHAR(c.FECHA_CITA, 'DD/MM/YYYY') || ' a las ' || c.HORA_INICIO || '.',
+               SYSTIMESTAMP, 'N'
+        FROM APP_CLINICA.CITAS c
+        WHERE c.ESTADO_CITA_ID = 1 -- Pendiente
+          AND c.FECHA_CITA = TRUNC(SYSDATE + 1)
+          AND NOT EXISTS (
+              SELECT 1 FROM APP_CLINICA.NOTIFICACIONES n
+              WHERE n.CITA_ID = c.CITA_ID AND n.TIPO = 'RECORDATORIO'
+          );
+        COMMIT;
+    END SP_PROCESAR_RECORDATORIOS;
 
-END PKG_CITAS;
+END PKG_VALOR;
 /

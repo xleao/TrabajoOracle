@@ -1,0 +1,46 @@
+flowchart TD
+    %% Configuraciones
+    classDef innerNode fill:#ffffff,stroke:#cccccc,stroke-width:1px,rx:6px,ry:6px;
+    classDef apiNode fill:#e2e8f0,stroke:#64748b,stroke-width:2px,rx:10px,ry:10px,font-weight:bold;
+
+    API["💻 Node.js API (server.js)<br><i>Conexión vía oracledb pool</i>"]:::apiNode
+
+    API ==> SEG_TABLAS
+    API ==> APP_TABLAS
+
+    subgraph SEG_CLINICA [Esquema: SEG_CLINICA]
+        direction TB
+        SEG_TABLAS["🗄️ Tablas:<br>ROLES, USUARIOS, SESIONES, AUDITORIA"]:::innerNode
+        SEG_PKGS["⚙️ Paquetes:<br>PKG_SEGURIDAD"]:::innerNode
+        SEG_VIEWS["👁️ Vistas:<br>VW_USUARIOS_ACTIVOS"]:::innerNode
+        SEG_JOBS["⏱️ Jobs:<br>JOB_EXPIRAR_SESIONES"]:::innerNode
+        SEG_SEQS["🔢 Secuencias:<br>SEQ_USUARIOS, SEQ_AUDITORIA"]:::innerNode
+        
+        SEG_TABLAS ~~~ SEG_PKGS ~~~ SEG_VIEWS ~~~ SEG_JOBS ~~~ SEG_SEQS
+    end
+    style SEG_CLINICA fill:#f0f4f8,stroke:#1A3C6B,stroke-width:4px,color:#1A3C6B,rx:10,ry:10
+
+    subgraph APP_CLINICA [Esquema: APP_CLINICA]
+        direction TB
+        APP_TABLAS["🗄️ Tablas:<br>ESPECIALIDADES, MEDICOS, HORARIOS, PACIENTES..."]:::innerNode
+        APP_PKGS["⚙️ Paquetes:<br>PKG_VALOR, PKG_ADMINISTRACION, PKG_CONSULTAS..."]:::innerNode
+        APP_VIEWS["👁️ Vistas:<br>VW_AGENDA_DIARIA, VW_HISTORIAL_PACIENTE..."]:::innerNode
+        APP_TRIGGERS["⚡ Triggers:<br>TRG_IMPEDIR_EMPATE_CITA, TRG_AUDITORIA..."]:::innerNode
+        APP_SEQS["🔢 Secuencias:<br>SEQ_CITAS, SEQ_PACIENTES, SEQ_MEDICOS..."]:::innerNode
+        
+        APP_TABLAS ~~~ APP_PKGS ~~~ APP_VIEWS ~~~ APP_TRIGGERS ~~~ APP_SEQS
+    end
+    style APP_CLINICA fill:#f0fdf4,stroke:#2E753D,stroke-width:4px,color:#2E753D,rx:10,ry:10
+
+    %% Conexiones cruzadas explícitas
+    APP_PKGS -->|1. GRANT EXECUTE → PKG_SEGURIDAD| SEG_PKGS
+    SEG_TABLAS -->|2. GRANT SELECT/INSERT/UPDATE| APP_PKGS
+    SEG_TABLAS -.->|3. FK Cruzada: USUARIOS.MEDICO_ID| APP_TABLAS
+    APP_TABLAS -.->|4. Sinónimos privados| SEG_TABLAS
+
+    linkStyle 0 stroke:#64748b,stroke-width:3px;
+    linkStyle 1 stroke:#64748b,stroke-width:3px;
+    linkStyle 2 stroke:#e67e22,stroke-width:3px;
+    linkStyle 3 stroke:#e67e22,stroke-width:3px;
+    linkStyle 4 stroke:#e74c3c,stroke-width:3px,stroke-dasharray: 5 5;
+    linkStyle 5 stroke:#7f8c8d,stroke-width:2px,stroke-dasharray: 5 5;

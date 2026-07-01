@@ -23,6 +23,15 @@ CREATE OR REPLACE PACKAGE SEG_CLINICA.PKG_SEGURIDAD AS
     FUNCTION FN_LISTAR_USUARIOS RETURN SYS_REFCURSOR;
     FUNCTION FN_LISTAR_ROLES RETURN SYS_REFCURSOR;
     FUNCTION FN_LISTAR_AUDITORIA RETURN SYS_REFCURSOR;
+    
+    -- Procedimiento para registrar auditoría (llamado por triggers)
+    PROCEDURE SP_REGISTRAR_AUDITORIA(
+        p_usuario_id IN NUMBER,
+        p_tabla IN VARCHAR2,
+        p_operacion IN VARCHAR2,
+        p_datos_antes IN CLOB,
+        p_datos_despues IN CLOB
+    );
 END PKG_SEGURIDAD;
 /
 
@@ -135,14 +144,38 @@ CREATE OR REPLACE PACKAGE BODY SEG_CLINICA.PKG_SEGURIDAD AS
         v_cursor SYS_REFCURSOR;
     BEGIN
         OPEN v_cursor FOR
-            SELECT a.AUDITORIA_ID, u.NOMBRE_COMPLETO as USUARIO, a.TABLA_AFECTADA, 
-                   a.OPERACION, a.REGISTRO_ID, TO_CHAR(a.DATOS_ANTES) AS DATOS_ANTES, 
-                   TO_CHAR(a.DATOS_DESPUES) AS DATOS_DESPUES, a.FECHA_HORA, a.IP_CLIENTE
+            SELECT a.AUDITORIA_ID, a.FECHA_HORA AS FECHA_REGISTRO, a.TABLA_AFECTADA, a.OPERACION,
+                   NVL(u.USERNAME, 'SISTEMA') AS USUARIO,
+                   a.DATOS_ANTES, a.DATOS_DESPUES
             FROM SEG_CLINICA.AUDITORIA a
             LEFT JOIN SEG_CLINICA.USUARIOS u ON a.USUARIO_ID = u.USUARIO_ID
             ORDER BY a.FECHA_HORA DESC;
         RETURN v_cursor;
     END FN_LISTAR_AUDITORIA;
 
+    PROCEDURE SP_REGISTRAR_AUDITORIA(
+        p_usuario_id IN NUMBER,
+        p_tabla IN VARCHAR2,
+        p_operacion IN VARCHAR2,
+        p_datos_antes IN CLOB,
+        p_datos_despues IN CLOB
+    ) IS
+    BEGIN
+        INSERT INTO SEG_CLINICA.AUDITORIA (
+            AUDITORIA_ID, USUARIO_ID, TABLA_AFECTADA, OPERACION, DATOS_ANTES, DATOS_DESPUES, FECHA_HORA
+        ) VALUES (
+            SEG_CLINICA.SEQ_AUDITORIA.NEXTVAL,
+            NVL(p_usuario_id, -1),
+            p_tabla,
+            p_operacion,
+            p_datos_antes,
+            p_datos_despues,
+            SYSTIMESTAMP
+        );
+    END SP_REGISTRAR_AUDITORIA;
+
 END PKG_SEGURIDAD;
 /
+
+-- Ahora que el paquete existe, se puede otorgar el privilegio de ejecución
+GRANT EXECUTE ON SEG_CLINICA.PKG_SEGURIDAD TO APP_CLINICA;

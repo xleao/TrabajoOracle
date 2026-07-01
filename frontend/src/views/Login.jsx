@@ -49,18 +49,23 @@ export default function Login() {
       <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '440px', padding: '3rem', position: 'relative', zIndex: 10 }}>
         
         <div className="text-center mb-6">
-          <div style={{ 
-            display: 'inline-flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            width: '64px', 
-            height: '64px', 
-            borderRadius: '16px', 
-            background: 'var(--primary-light)',
-            boxShadow: 'var(--shadow-glow)',
-            marginBottom: '1rem',
-            color: 'white'
-          }}>
+          <div 
+            onClick={() => navigate('/')}
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              width: '64px', 
+              height: '64px', 
+              borderRadius: '16px', 
+              background: 'var(--primary-light)',
+              boxShadow: 'var(--shadow-glow)',
+              marginBottom: '1rem',
+              color: 'white',
+              cursor: 'pointer'
+            }}
+            title="Volver al inicio"
+          >
             <Activity size={32} />
           </div>
           <h1 style={{ color: 'var(--primary-dark)', fontSize: '1.75rem', marginBottom: '0.5rem' }}>Clínica Salud y Vida</h1>

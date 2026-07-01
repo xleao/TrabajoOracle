@@ -157,41 +157,10 @@ export default function RecepcionAgenda() {
     try {
       const res = await axios.get(`http://localhost:5000/api/citas/disponibilidad?medicoId=${selectedMedicoId}&fecha=${bookingDate}`);
       if (res.data.success && res.data.data.length > 0) {
-        // Franjas libres returns list of occupied ranges and schedule limits.
-        // We calculate slots. Let's write slot calculator or display the raw slot logic.
-        // Since database/packages/06_pkg_citas.sql:123:FN_OBTENER_FRANJAS_LIBRES returns:
-        // HORARIO_INICIO_JORNADA, HORARIO_FIN_JORNADA, DURACION_CITA_MIN, OCUPADO_DESDE, OCUPADO_HASTA.
-        // Let's generate slots based on this returned data!
-        const rawData = res.data.data;
-        const duracion = rawData[0].DURACION_CITA_MIN || 30;
-        
-        // Generate list of possible slots in the shift (morning and afternoon)
-        // Check if there are overlapping appointments
-        const slots = [];
-        const startHour = parseInt(rawData[0].HORARIO_INICIO_JORNADA.split(':')[0]);
-        const endHour = parseInt(rawData[0].HORARIO_FIN_JORNADA.split(':')[0]);
-        
-        // Create simple 30 min slots
-        let current = new Date(`2026-01-01T${rawData[0].HORARIO_INICIO_JORNADA}:00`);
-        const limit = new Date(`2026-01-01T${rawData[0].HORARIO_FIN_JORNADA}:00`);
-        
-        while (current < limit) {
-          const slotStart = current.toTimeString().substring(0, 5);
-          current.setMinutes(current.getMinutes() + duracion);
-          const slotEnd = current.toTimeString().substring(0, 5);
-          
-          // Check if slot is occupied
-          const isOccupied = rawData.some(d => 
-            d.OCUPADO_DESDE && (
-              (slotStart >= d.OCUPADO_DESDE && slotStart < d.OCUPADO_HASTA) ||
-              (slotEnd > d.OCUPADO_DESDE && slotEnd <= d.OCUPADO_HASTA)
-            )
-          );
-          
-          if (!isOccupied) {
-            slots.push({ start: slotStart, end: slotEnd });
-          }
-        }
+        const slots = res.data.data.map(item => ({
+          start: item.FRANJA_INICIO,
+          end: item.FRANJA_FIN
+        }));
         setFreeSlots(slots);
       } else {
         setFreeSlots([]);
@@ -211,28 +180,10 @@ export default function RecepcionAgenda() {
     try {
       const res = await axios.get(`http://localhost:5000/api/citas/disponibilidad?medicoId=${activeCita.MEDICO_ID}&fecha=${reprogramDate}`);
       if (res.data.success && res.data.data.length > 0) {
-        const rawData = res.data.data;
-        const duracion = rawData[0].DURACION_CITA_MIN || 30;
-        const slots = [];
-        let current = new Date(`2026-01-01T${rawData[0].HORARIO_INICIO_JORNADA}:00`);
-        const limit = new Date(`2026-01-01T${rawData[0].HORARIO_FIN_JORNADA}:00`);
-        
-        while (current < limit) {
-          const slotStart = current.toTimeString().substring(0, 5);
-          current.setMinutes(current.getMinutes() + duracion);
-          const slotEnd = current.toTimeString().substring(0, 5);
-          
-          const isOccupied = rawData.some(d => 
-            d.OCUPADO_DESDE && (
-              (slotStart >= d.OCUPADO_DESDE && slotStart < d.OCUPADO_HASTA) ||
-              (slotEnd > d.OCUPADO_DESDE && slotEnd <= d.OCUPADO_HASTA)
-            )
-          );
-          
-          if (!isOccupied) {
-            slots.push({ start: slotStart, end: slotEnd });
-          }
-        }
+        const slots = res.data.data.map(item => ({
+          start: item.FRANJA_INICIO,
+          end: item.FRANJA_FIN
+        }));
         setReprogramSlots(slots);
       } else {
         setReprogramSlots([]);
@@ -251,7 +202,31 @@ export default function RecepcionAgenda() {
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!selectedPatient) {
+    let patientToBook = selectedPatient;
+
+    // Si no está seleccionado pero hay texto en la caja de búsqueda, intentamos auto-buscar y seleccionar
+    if (!patientToBook && searchPatientVal.trim()) {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/pacientes?filtro=${searchPatientVal}`);
+        if (res.data.success && res.data.data.length === 1) {
+          patientToBook = res.data.data[0];
+          setSelectedPatient(patientToBook);
+        } else if (res.data.success && res.data.data.length > 1) {
+          setSearchedPacientes(res.data.data);
+          setErrorMsg('Se encontraron múltiples pacientes con ese nombre. Por favor, selecciona el correcto en la lista que apareció abajo.');
+          return;
+        } else {
+          setErrorMsg('No se encontró ningún paciente con ese término. Regístralo primero en el mantenimiento.');
+          return;
+        }
+      } catch (err) {
+        console.error('Auto-search error:', err);
+        setErrorMsg('Error al buscar al paciente automáticamente.');
+        return;
+      }
+    }
+
+    if (!patientToBook) {
       setErrorMsg('Debe seleccionar un paciente.');
       return;
     }
@@ -554,7 +529,7 @@ export default function RecepcionAgenda() {
                     <div 
                       key={p.PACIENTE_ID} 
                       onClick={() => setSelectedPatient(p)}
-                      style={{ padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-light)', cursor: 'pointer', display: 'flex', justifyBetween: 'space-between' }}
+                      style={{ padding: '0.5rem 1rem', borderBottom: '1px solid var(--border-light)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}
                       onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--accent)'}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >

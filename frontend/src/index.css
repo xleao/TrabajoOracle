@@ -1,5 +1,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap');
 
+/* Lenis Smooth Scroll Configuration */
+html.lenis, html.lenis-smooth {
+  height: auto;
+}
+
+html.lenis-smooth body {
+  overflow: anchor;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
 :root {
   /* Color Palette - Premium Healthcare Theme */
   --primary: #026C80; /* Deep Teal */
@@ -398,3 +419,104 @@ button {
 .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Staggered Entrance and Premium Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes float-delayed {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    transform: scale(1) translate(0, 0);
+  }
+  50% {
+    transform: scale(1.15) translate(20px, -20px);
+  }
+}
+
+@keyframes pulseGlow2 {
+  0%, 100% {
+    transform: scale(1) translate(0, 0);
+  }
+  50% {
+    transform: scale(1.2) translate(-30px, 30px);
+  }
+}
+
+@keyframes pulseBeat {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4px 10px rgba(242, 106, 75, 0.3);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 6px 18px rgba(242, 106, 75, 0.5);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.animate-float-delayed {
+  animation: float-delayed 5s ease-in-out infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.animate-pulse-glow-1 {
+  animation: pulseGlow 15s ease-in-out infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.animate-pulse-glow-2 {
+  animation: pulseGlow2 18s ease-in-out infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.animate-pulse-beat {
+  animation: pulseBeat 2.5s ease-in-out infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.delay-100 { animation-delay: 100ms !important; }
+.delay-200 { animation-delay: 200ms !important; }
+.delay-300 { animation-delay: 300ms !important; }
+.delay-400 { animation-delay: 400ms !important; }
+.delay-500 { animation-delay: 500ms !important; }
+

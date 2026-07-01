@@ -3,21 +3,7 @@
 -- ==============================================================================
 
 -- ==============================================================================
--- 1. PROCEDIMIENTOS ALMACENADOS INDEPENDIENTES (APP_CLINICA)
--- ==============================================================================
-
--- SP_MARCAR_NOTIF_LEIDA: Permite marcar como leída una notificación del sistema
-CREATE OR REPLACE PROCEDURE APP_CLINICA.SP_MARCAR_NOTIF_LEIDA(p_notificacion_id IN NUMBER) IS
-BEGIN
-    UPDATE APP_CLINICA.NOTIFICACIONES 
-    SET LEIDA = 'S' 
-    WHERE NOTIFICACION_ID = p_notificacion_id;
-    COMMIT;
-END;
-/
-
--- ==============================================================================
--- 2. DISPARADORES / TRIGGERS (5 Requeridos)
+-- 1. DISPARADORES / TRIGGERS (5 Requeridos)
 -- ==============================================================================
 
 -- TRG_FECHA_MODIFICACION: Actualiza FECHA_MODIFICACION en CITAS antes de cualquier UPDATE
@@ -134,10 +120,13 @@ BEGIN
         v_despues := '{"paciente_id": ' || :NEW.PACIENTE_ID || ', "estado": ' || :NEW.ESTADO_CITA_ID || '}';
     END IF;
 
-    INSERT INTO APP_CLINICA.AUDITORIA (
-        AUDITORIA_ID, USUARIO_ID, TABLA_AFECTADA, OPERACION, REGISTRO_ID, DATOS_ANTES, DATOS_DESPUES
-    ) VALUES (
-        SEG_CLINICA.SEQ_AUDITORIA.NEXTVAL, v_usuario, 'CITAS', v_operacion, v_registro_id, v_antes, v_despues
+    -- Llamada al paquete de seguridad (Requerimiento SEG05 encapsulado)
+    SEG_CLINICA.PKG_SEGURIDAD.SP_REGISTRAR_AUDITORIA(
+        p_usuario_id => v_usuario,
+        p_tabla => 'CITAS',
+        p_operacion => v_operacion,
+        p_datos_antes => v_antes,
+        p_datos_despues => v_despues
     );
 END;
 /
@@ -181,12 +170,13 @@ BEGIN
                   || '", "estado": "' || :NEW.ESTADO || '"}';
     END IF;
 
-    INSERT INTO APP_CLINICA.AUDITORIA (
-        AUDITORIA_ID, USUARIO_ID, TABLA_AFECTADA, OPERACION, 
-        REGISTRO_ID, DATOS_ANTES, DATOS_DESPUES
-    ) VALUES (
-        SEG_CLINICA.SEQ_AUDITORIA.NEXTVAL, -1, 'PACIENTES', v_operacion, 
-        v_registro_id, v_antes, v_despues
+    -- Llamada al paquete de seguridad (Requerimiento SEG05 encapsulado)
+    SEG_CLINICA.PKG_SEGURIDAD.SP_REGISTRAR_AUDITORIA(
+        p_usuario_id => -1,
+        p_tabla => 'PACIENTES',
+        p_operacion => v_operacion,
+        p_datos_antes => v_antes,
+        p_datos_despues => v_despues
     );
 END;
 /
@@ -293,21 +283,7 @@ BEGIN
     DBMS_SCHEDULER.create_job (
         job_name        => 'APP_CLINICA.JOB_RECORDATORIOS_24H',
         job_type        => 'PLSQL_BLOCK',
-        job_action      => '
-            BEGIN
-                FOR r IN (
-                    SELECT c.CITA_ID, c.PACIENTE_ID, p.NOMBRES
-                    FROM APP_CLINICA.CITAS c
-                    JOIN APP_CLINICA.PACIENTES p ON c.PACIENTE_ID = p.PACIENTE_ID
-                    WHERE c.ESTADO_CITA_ID = 2 -- Confirmada
-                      AND TRUNC(c.FECHA_CITA) = TRUNC(SYSDATE + 1)
-                      AND c.CITA_ID NOT IN (SELECT CITA_ID FROM APP_CLINICA.NOTIFICACIONES WHERE TIPO = ''RECORDATORIO'')
-                ) LOOP
-                    INSERT INTO APP_CLINICA.NOTIFICACIONES (NOTIFICACION_ID, CITA_ID, PACIENTE_ID, TIPO, MENSAJE)
-                    VALUES (APP_CLINICA.SEQ_NOTIFICACIONES.NEXTVAL, r.CITA_ID, r.PACIENTE_ID, ''RECORDATORIO'', ''Recordatorio: Su cita médica es mañana.'');
-                END LOOP;
-                COMMIT;
-            END;',
+        job_action      => 'BEGIN APP_CLINICA.PKG_VALOR.SP_PROCESAR_RECORDATORIOS; END;',
         start_date      => SYSTIMESTAMP,
         repeat_interval => 'freq=hourly', -- Cada 1 hora
         enabled         => TRUE

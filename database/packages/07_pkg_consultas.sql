@@ -3,6 +3,9 @@
 -- ==============================================================================
 
 CREATE OR REPLACE PACKAGE APP_CLINICA.PKG_CONSULTAS AS
+    -- CON01: Disponibilidad de un médico en una fecha (franjas libres)
+    FUNCTION FN_OBTENER_FRANJAS_LIBRES(p_medico_id IN NUMBER, p_fecha IN DATE) RETURN SYS_REFCURSOR;
+    -- CON02: Agenda diaria del médico
     FUNCTION FN_AGENDA_DIARIA(p_medico_id IN NUMBER, p_fecha IN DATE) RETURN SYS_REFCURSOR;
     FUNCTION FN_HISTORIAL_PACIENTE(p_paciente_id IN NUMBER) RETURN SYS_REFCURSOR;
     FUNCTION FN_CITAS_POR_ESPECIALIDAD(p_especialidad_id IN NUMBER, p_fecha_inicio IN DATE, p_fecha_fin IN DATE) RETURN SYS_REFCURSOR;
@@ -15,11 +18,55 @@ CREATE OR REPLACE PACKAGE APP_CLINICA.PKG_CONSULTAS AS
     FUNCTION FN_LISTAR_HORARIOS(p_medico_id IN NUMBER DEFAULT NULL) RETURN SYS_REFCURSOR;
     FUNCTION FN_LISTAR_ESTADOS_CITA RETURN SYS_REFCURSOR;
     FUNCTION FN_LISTAR_NOTIFICACIONES RETURN SYS_REFCURSOR;
+    PROCEDURE SP_MARCAR_NOTIF_LEIDA(p_notificacion_id IN NUMBER);
 END PKG_CONSULTAS;
 /
 
 CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CONSULTAS AS
 
+    -- CON01: Franjas libres de un médico en una fecha
+    FUNCTION FN_OBTENER_FRANJAS_LIBRES(p_medico_id IN NUMBER, p_fecha IN DATE) RETURN SYS_REFCURSOR IS
+        v_cursor SYS_REFCURSOR;
+    BEGIN
+        OPEN v_cursor FOR
+            WITH horario AS (
+                SELECT HORA_INICIO, HORA_FIN, DURACION_CITA_MIN,
+                       FLOOR(
+                           (TO_DATE(HORA_FIN,   'HH24:MI') -
+                            TO_DATE(HORA_INICIO, 'HH24:MI')) * 1440
+                           / DURACION_CITA_MIN
+                       ) AS NUM_SLOTS
+                FROM APP_CLINICA.HORARIOS_MEDICO
+                WHERE MEDICO_ID  = p_medico_id
+                  AND DIA_SEMANA = TO_NUMBER(TO_CHAR(p_fecha, 'D'))
+                  AND ESTADO     = 'A'
+            ),
+            numeros AS (
+                SELECT LEVEL AS n FROM DUAL CONNECT BY LEVEL <= 100
+            ),
+            franjas AS (
+                SELECT
+                    TO_CHAR(TO_DATE(h.HORA_INICIO,'HH24:MI') + (n.n-1) * h.DURACION_CITA_MIN / 1440, 'HH24:MI') AS FRANJA_INICIO,
+                    TO_CHAR(TO_DATE(h.HORA_INICIO,'HH24:MI') +  n.n    * h.DURACION_CITA_MIN / 1440, 'HH24:MI') AS FRANJA_FIN,
+                    h.DURACION_CITA_MIN
+                FROM horario h
+                JOIN numeros n ON n.n <= h.NUM_SLOTS
+            )
+            SELECT f.FRANJA_INICIO, f.FRANJA_FIN, f.DURACION_CITA_MIN
+            FROM franjas f
+            WHERE NOT EXISTS (
+                SELECT 1 FROM APP_CLINICA.CITAS c
+                WHERE c.MEDICO_ID        = p_medico_id
+                  AND TRUNC(c.FECHA_CITA) = TRUNC(p_fecha)
+                  AND c.ESTADO_CITA_ID  IN (1, 2)
+                  AND c.HORA_INICIO      < f.FRANJA_FIN
+                  AND c.HORA_FIN         > f.FRANJA_INICIO
+            )
+            ORDER BY f.FRANJA_INICIO;
+        RETURN v_cursor;
+    END FN_OBTENER_FRANJAS_LIBRES;
+
+    -- CON02: Agenda diaria del médico
     FUNCTION FN_AGENDA_DIARIA(p_medico_id IN NUMBER, p_fecha IN DATE) RETURN SYS_REFCURSOR IS
         v_cursor SYS_REFCURSOR;
     BEGIN
@@ -160,6 +207,14 @@ CREATE OR REPLACE PACKAGE BODY APP_CLINICA.PKG_CONSULTAS AS
             ORDER BY n.FECHA_GENERACION DESC;
         RETURN v_cursor;
     END FN_LISTAR_NOTIFICACIONES;
+
+    PROCEDURE SP_MARCAR_NOTIF_LEIDA(p_notificacion_id IN NUMBER) IS
+    BEGIN
+        UPDATE APP_CLINICA.NOTIFICACIONES
+        SET LEIDA = 'S'
+        WHERE NOTIFICACION_ID = p_notificacion_id;
+        COMMIT;
+    END SP_MARCAR_NOTIF_LEIDA;
 
 END PKG_CONSULTAS;
 /

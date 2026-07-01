@@ -163,3 +163,25 @@ CREATE TABLE APP_CLINICA.NOTIFICACIONES (
     CONSTRAINT FK_NOTIF_CITA FOREIGN KEY (CITA_ID) REFERENCES APP_CLINICA.CITAS(CITA_ID),
     CONSTRAINT FK_NOTIF_PACIENTE FOREIGN KEY (PACIENTE_ID) REFERENCES APP_CLINICA.PACIENTES(PACIENTE_ID)
 );
+
+-- ==============================================================================
+-- 5. ÍNDICES (JUSTIFICADOS PARA CONSULTAS RELEVANTES)
+-- ==============================================================================
+
+-- Índice en PACIENTE_ID (CITAS): Mejora búsquedas del historial clínico (Requerimiento CON02)
+CREATE INDEX APP_CLINICA.IDX_CITAS_PACIENTE ON APP_CLINICA.CITAS(PACIENTE_ID);
+
+-- Índice en MEDICO_ID y FECHA_CITA (CITAS): Vital para verificar disponibilidad y la agenda diaria (Requerimientos VAL04, CON01)
+CREATE INDEX APP_CLINICA.IDX_CITAS_MEDICO_FECHA ON APP_CLINICA.CITAS(MEDICO_ID, FECHA_CITA);
+
+-- Índice en ESTADO_CITA_ID (CITAS): Optimiza reportes estadísticos por estado y cancelaciones (Requerimientos CON04, REP03)
+CREATE INDEX APP_CLINICA.IDX_CITAS_ESTADO ON APP_CLINICA.CITAS(ESTADO_CITA_ID);
+
+-- Índice en DNI (PACIENTES): Para agilizar las búsquedas de pacientes en recepción (Requerimiento CON05)
+CREATE INDEX APP_CLINICA.IDX_PACIENTES_DNI ON APP_CLINICA.PACIENTES(DNI);
+
+-- Índice en DIA_SEMANA (HORARIOS_MEDICO): Acelera la búsqueda de franjas libres (Requerimiento VAL05)
+CREATE INDEX APP_CLINICA.IDX_HORARIOS_DIA ON APP_CLINICA.HORARIOS_MEDICO(DIA_SEMANA);
+
+-- Índice en USUARIO_ID (AUDITORIA): Mejora filtrado de auditoría por usuario (Requerimiento SEG05)
+CREATE INDEX SEG_CLINICA.IDX_AUDITORIA_USUARIO ON SEG_CLINICA.AUDITORIA(USUARIO_ID);

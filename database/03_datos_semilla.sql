@@ -36,15 +36,14 @@ INSERT INTO SEG_CLINICA.USUARIOS (
 );
 
 -- 4. USUARIO ADMINISTRADOR (SEG_CLINICA)
--- Nota: La contraseña aquí es el HASH SHA-256 de "admin123" generado vía DBMS_CRYPTO.HASH(UTL_I18N.STRING_TO_RAW('admin123', 'AL32UTF8'), DBMS_CRYPTO.HASH_SH256)
--- Para este script semilla, insertaremos un valor raw de ejemplo. 
--- El HASH real SHA256 de 'admin123' es: 8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918
+-- La contraseña se hashea con FN_HASH_PASSWORD para garantizar consistencia
+-- con el algoritmo real de DBMS_CRYPTO instalado. Credenciales: admin / admin123
 INSERT INTO SEG_CLINICA.USUARIOS (
     USUARIO_ID, USERNAME, PASSWORD_HASH, NOMBRE_COMPLETO, EMAIL, ROL_ID, MEDICO_ID
 ) VALUES (
     SEG_CLINICA.SEQ_USUARIOS.NEXTVAL,
     'admin',
-    HEXTORAW('8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918'),
+    SEG_CLINICA.PKG_SEGURIDAD.FN_HASH_PASSWORD('admin123'),
     'Administrador del Sistema',
     'admin@saludyvida.com',
     1, -- ROL: ADMINISTRADOR
