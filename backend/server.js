@@ -40,6 +40,57 @@ async function initializeDb() {
   }
 }
 
+function fixUTF8Encoding(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/Ã¡/g, 'á')
+    .replace(/Ã©/g, 'é')
+    .replace(/Ã­/g, 'í')
+    .replace(/Ã³/g, 'ó')
+    .replace(/Ãº/g, 'ú')
+    .replace(/Ã±/g, 'ñ')
+    .replace(/Ã/g, 'Ñ')
+    .replace(/Ã/g, 'Á')
+    .replace(/Ã/g, 'É')
+    .replace(/Ã/g, 'Í')
+    .replace(/Ã/g, 'Ó')
+    .replace(/Ã/g, 'Ú')
+    .replace(/Ã¼/g, 'ü');
+}
+
+function sanitize(data) {
+  if (data === null || data === undefined) return data;
+  if (typeof data === 'string') {
+    return fixUTF8Encoding(data);
+  }
+  if (Array.isArray(data)) {
+    return data.map(sanitize);
+  }
+  if (typeof data === 'object') {
+    if (data instanceof Date) return data;
+    if (Buffer.isBuffer(data)) return data;
+    const clean = {};
+    for (const key in data) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        clean[key] = sanitize(data[key]);
+      }
+    }
+    return clean;
+  }
+  return data;
+}
+
+function translateOracleError(err, type) {
+  if (!err || !err.message) return 'Error de base de datos.';
+  if (err.message.includes('ORA-00001')) {
+    if (type === 'paciente') return 'El DNI ingresado ya está registrado para otro paciente.';
+    if (type === 'medico') return 'El número de colegiatura ya está registrado para otro médico.';
+    if (type === 'usuario') return 'El nombre de usuario (username) ya está en uso por otra cuenta.';
+    if (type === 'especialidad') return 'El nombre de la especialidad ya existe.';
+  }
+  return err.message;
+}
+
 // Helper to execute query with connection from pool
 async function executeDb(query, binds = {}, options = {}) {
   let connection;
@@ -47,6 +98,9 @@ async function executeDb(query, binds = {}, options = {}) {
     connection = await pool.getConnection();
     await connection.execute("ALTER SESSION SET NLS_TERRITORY = 'AMERICA'");
     const result = await connection.execute(query, binds, options);
+    if (result && result.rows) {
+      result.rows = sanitize(result.rows);
+    }
     return result;
   } catch (err) {
     throw err;
@@ -80,7 +134,7 @@ async function executeWithCursor(query, binds = {}) {
     const rows = [];
     let row;
     while ((row = await cursor.getRow())) {
-      rows.push(row);
+      rows.push(sanitize(row));
     }
     await cursor.close();
     return rows;
@@ -268,7 +322,7 @@ app.post('/api/pacientes/gestionar', authenticateToken, async (req, res) => {
     res.json({ success: true, pacienteId: result.outBinds.pacienteId, message: 'Paciente gestionado con éxito' });
   } catch (err) {
     console.error('Gestionar paciente error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: translateOracleError(err, 'paciente') });
   }
 });
 
@@ -310,7 +364,7 @@ app.post('/api/medicos/gestionar', authenticateToken, async (req, res) => {
     res.json({ success: true, medicoId: result.outBinds.medicoId, message: 'Médico gestionado con éxito' });
   } catch (err) {
     console.error('Gestionar medico error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: translateOracleError(err, 'medico') });
   }
 });
 
@@ -347,7 +401,7 @@ app.post('/api/especialidades/gestionar', authenticateToken, async (req, res) =>
     res.json({ success: true, especialidadId: result.outBinds.especialidadId, message: 'Especialidad gestionada con éxito' });
   } catch (err) {
     console.error('Gestionar especialidad error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: translateOracleError(err, 'especialidad') });
   }
 });
 
@@ -442,7 +496,7 @@ app.post('/api/usuarios/gestionar', authenticateToken, async (req, res) => {
     res.json({ success: true, usuarioId: result.outBinds.usuarioId, message: 'Usuario gestionado con éxito' });
   } catch (err) {
     console.error('Gestionar usuario error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: translateOracleError(err, 'usuario') });
   }
 });
 
@@ -779,12 +833,28 @@ app.get('/api/auditoria', authenticateToken, async (req, res) => {
   }
 });
 
+function fixEncoding(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/ma\?\?ana/g, 'mañana')
+    .replace(/maÃ±ana/g, 'mañana')
+    .replace(/maana/g, 'mañana')
+    .replace(/ma\?ana/g, 'mañana')
+    .replace(/m\?\?dica/g, 'médica')
+    .replace(/mÃ©dica/g, 'médica')
+    .replace(/mdica/g, 'médica');
+}
+
 app.get('/api/notificaciones', authenticateToken, async (req, res) => {
   try {
     const list = await executeWithCursor(
       `BEGIN :ret := APP_CLINICA.PKG_CONSULTAS.FN_LISTAR_NOTIFICACIONES(); END;`
     );
-    res.json({ success: true, data: list });
+    const cleanedList = list.map(item => ({
+      ...item,
+      MENSAJE: fixEncoding(item.MENSAJE)
+    }));
+    res.json({ success: true, data: cleanedList });
   } catch (err) {
     console.error('Get notificaciones error:', err);
     res.status(500).json({ success: false, message: err.message });
